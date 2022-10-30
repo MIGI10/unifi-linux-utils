@@ -21,19 +21,21 @@
 # script. If anything goes wrong, you can restore from your backup, restart the UniFi Controller service,
 # and be back online immediately.
 
+# Ignore certificate MD5 check
+FORCE_IMPORT=no
+
 # CONFIGURATION OPTIONS
-UNIFI_HOSTNAME=hostname.example.com
-UNIFI_SERVICE=unifi
+UNIFI_CONTAINER=unifi-controller
 
 # Uncomment following three lines for Fedora/RedHat/CentOS
-UNIFI_DIR=/opt/UniFi
-JAVA_DIR=${UNIFI_DIR}
-KEYSTORE=${UNIFI_DIR}/data/keystore
+#UNIFI_DIR=/opt/UniFi
+#JAVA_DIR=${UNIFI_DIR}
+#KEYSTORE=${UNIFI_DIR}/data/keystore
 
 # Uncomment following three lines for Debian/Ubuntu
-#UNIFI_DIR=/var/lib/unifi
-#JAVA_DIR=/usr/lib/unifi
-#KEYSTORE=${UNIFI_DIR}/keystore
+UNIFI_DIR=/volume1/docker/UniFi
+JAVA_DIR=${UNIFI_DIR}
+KEYSTORE=${UNIFI_DIR}/data/keystore
 
 # Uncomment following three lines for CloudKey
 #UNIFI_DIR=/var/lib/unifi
@@ -42,8 +44,8 @@ KEYSTORE=${UNIFI_DIR}/data/keystore
 
 # FOR LET'S ENCRYPT SSL CERTIFICATES ONLY
 # Generate your Let's Encrtypt key & cert with certbot before running this script
-LE_MODE=no
-LE_LIVE_DIR=/etc/letsencrypt/live
+LE_MODE=yes
+LE_LIVE_DIR=/usr/syno/etc/certificate/_archive/YM2Vdn
 
 # THE FOLLOWING OPTIONS NOT REQUIRED IF LE_MODE IS ENABLED
 PRIV_KEY=/etc/ssl/private/hostname.example.com.key
@@ -63,8 +65,8 @@ printf "\nStarting UniFi Controller SSL Import...\n"
 if [[ ${LE_MODE} == "YES" || ${LE_MODE} == "yes" || ${LE_MODE} == "Y" || ${LE_MODE} == "y" || ${LE_MODE} == "TRUE" || ${LE_MODE} == "true" || ${LE_MODE} == "ENABLED" || ${LE_MODE} == "enabled" || ${LE_MODE} == 1 ]] ; then
 	LE_MODE=true
 	printf "\nRunning in Let's Encrypt Mode...\n"
-	PRIV_KEY=${LE_LIVE_DIR}/${UNIFI_HOSTNAME}/privkey.pem
-	CHAIN_FILE=${LE_LIVE_DIR}/${UNIFI_HOSTNAME}/fullchain.pem
+	PRIV_KEY=${LE_LIVE_DIR}/privkey.pem
+	CHAIN_FILE=${LE_LIVE_DIR}/fullchain.pem
 else
 	LE_MODE=false
 	printf "\nRunning in Standard Mode...\n"
@@ -73,7 +75,7 @@ fi
 if [[ ${LE_MODE} == "true" ]]; then
 	# Check to see whether LE certificate has changed
 	printf "\nInspecting current SSL certificate...\n"
-	if md5sum -c "${LE_LIVE_DIR}/${UNIFI_HOSTNAME}/privkey.pem.md5" &>/dev/null; then
+	if [[ ${FORCE_IMPORT} == "no" ]] && md5sum -c "${LE_LIVE_DIR}/privkey.pem.md5" &>/dev/null; then
 		# MD5 remains unchanged, exit the script
 		printf "\nCertificate is unchanged, no update is necessary.\n"
 		exit 0
@@ -99,14 +101,14 @@ P12_TEMP=$(mktemp)
 
 # Stop the UniFi Controller
 printf "\nStopping UniFi Controller...\n"
-service "${UNIFI_SERVICE}" stop
+docker stop "${UNIFI_CONTAINER}"
 
 if [[ ${LE_MODE} == "true" ]]; then
 	
 	# Write a new MD5 checksum based on the updated certificate	
 	printf "\nUpdating certificate MD5 checksum...\n"
 
-	md5sum "${PRIV_KEY}" > "${LE_LIVE_DIR}/${UNIFI_HOSTNAME}/privkey.pem.md5"
+	md5sum "${PRIV_KEY}" > "${LE_LIVE_DIR}/privkey.pem.md5"
 	
 fi
 
@@ -160,7 +162,7 @@ rm -f "${P12_TEMP}"
 	
 # Restart the UniFi Controller to pick up the updated keystore
 printf "\nRestarting UniFi Controller to apply new Let's Encrypt SSL certificate...\n"
-service "${UNIFI_SERVICE}" start
+docker start "${UNIFI_CONTAINER}"
 
 # That's all, folks!
 printf "\nDone!\n"
